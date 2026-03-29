@@ -89,7 +89,7 @@ class Enumerable(object):
         :return: list object
         """
         return [x for x in self]
-    
+
     def to_set(self) -> Set[Any]:
         """
         Converts the iterable into a set
@@ -129,7 +129,7 @@ class Enumerable(object):
         :return: minimum value
         """
         if len(self) == 0:
-            raise NoElementsError(u"Iterable contains no elements")
+            raise NoElementsError("Iterable contains no elements")
         return func(min(self, key=func))
 
     def max(self, func=lambda x: x) -> Number:
@@ -139,7 +139,7 @@ class Enumerable(object):
         :return: maximum value
         """
         if len(self) == 0:
-            raise NoElementsError(u"Iterable contains no elements")
+            raise NoElementsError("Iterable contains no elements")
         return func(max(self, key=func))
 
     def avg(self, func=lambda x: x) -> Number:
@@ -149,7 +149,7 @@ class Enumerable(object):
         :return: average value as float object
         """
         if len(self) == 0:
-            raise NoElementsError(u"Iterable contains no elements")
+            raise NoElementsError("Iterable contains no elements")
         return float(self.sum(func)) / float(self.count())
 
     def median(self, func=lambda x: x) -> Number:
@@ -159,7 +159,7 @@ class Enumerable(object):
         :return: median value
         """
         if len(self) == 0:
-            raise NoElementsError(u"Iterable contains no elements")
+            raise NoElementsError("Iterable contains no elements")
         result = self.order_by(func).select(func).to_list()
         length = len(result)
         i = int(length / 2)
@@ -247,7 +247,7 @@ class Enumerable(object):
         :return: new Enumerable object
         """
         if key is None:
-            raise NullArgumentError(u"No key for sorting given")
+            raise NullArgumentError("No key for sorting given")
         kf = [OrderingDirection(key, reverse=False)]
         return SortedEnumerable(Enumerable(iter(self)), key_funcs=kf)
 
@@ -258,7 +258,7 @@ class Enumerable(object):
         :return: new Enumerable object
         """
         if key is None:
-            raise NullArgumentError(u"No key for sorting given")
+            raise NullArgumentError("No key for sorting given")
         kf = [OrderingDirection(key, reverse=True)]
         return SortedEnumerable(Enumerable(iter(self)), key_funcs=kf)
 
@@ -350,7 +350,7 @@ class Enumerable(object):
         :return: new Enumerable object
         """
         if not isinstance(enumerable, Enumerable):
-            raise TypeError(u"enumerable argument must be an instance of Enumerable")
+            raise TypeError("enumerable argument must be an instance of Enumerable")
         return Enumerable(data=itertools.chain(self._iterable, enumerable._iterable))
 
     def group_by(
@@ -416,7 +416,7 @@ class Enumerable(object):
         """
         if not isinstance(inner_enumerable, Enumerable):
             raise TypeError(
-                u"inner_enumerable parameter must be an instance of Enumerable"
+                "inner_enumerable parameter must be an instance of Enumerable"
             )
         return (
             Enumerable(data=itertools.product(self, inner_enumerable))
@@ -452,7 +452,7 @@ class Enumerable(object):
         """
         if not isinstance(inner_enumerable, Enumerable):
             raise TypeError(
-                u"inner enumerable parameter must be an instance of Enumerable"
+                "inner enumerable parameter must be an instance of Enumerable"
             )
         group_joined = self.join(
             inner_enumerable=inner_enumerable.group_by(key_names=["id"], key=inner_key),
@@ -468,9 +468,11 @@ class Enumerable(object):
         :param predicate: condition to satisfy as lambda expression
         :return: boolean True or False
         """
-        if predicate is None: predicate = lambda x: True
+        if predicate is None:
+            predicate = lambda x: True
         for item in self:
-            if predicate(item): return True
+            if predicate(item):
+                return True
         return False
 
     def intersect(self, enumerable: TEnumerable, key: Callable):
@@ -482,7 +484,7 @@ class Enumerable(object):
         :return: new Enumerable object
         """
         if not isinstance(enumerable, Enumerable):
-            raise TypeError(u"enumerable parameter must be an instance of Enumerable")
+            raise TypeError("enumerable parameter must be an instance of Enumerable")
         membership = set((key(j) for j in enumerable))
         intrsct = (i for i in self if key(i) in membership)
         return Enumerable(data=intrsct).distinct(key)
@@ -514,7 +516,7 @@ class Enumerable(object):
         :return: new Enumerable object
         """
         if not isinstance(enumerable, Enumerable):
-            raise TypeError(u"enumerable parameter must be an instance of Enumerable")
+            raise TypeError("enumerable parameter must be an instance of Enumerable")
         return Enumerable(data=self.concat(enumerable)).distinct(key)
 
     def except_(self, enumerable: TEnumerable, key: Callable):
@@ -525,7 +527,7 @@ class Enumerable(object):
         :return: new Enumerable object
         """
         if not isinstance(enumerable, Enumerable):
-            raise TypeError(u"enumerable parameter must be an instance of Enumerable")
+            raise TypeError("enumerable parameter must be an instance of Enumerable")
         membership = set((key(j) for j in enumerable))
         exc = (i for i in self if key(i) not in membership)
         return Enumerable(data=exc).distinct(key)
@@ -800,9 +802,9 @@ class SortedEnumerable(Enumerable):
         :param data: data as iterable
         """
         if key_funcs is None:
-            raise NullArgumentError(u"key_funcs argument cannot be None")
+            raise NullArgumentError("key_funcs argument cannot be None")
         if not isinstance(key_funcs, list):
-            raise TypeError(u"key_funcs should be a list instance")
+            raise TypeError("key_funcs should be a list instance")
         self._key_funcs = [f for f in key_funcs if isinstance(f, OrderingDirection)]
         for o in reversed(self._key_funcs):
             data = sorted(data, key=o.key, reverse=o.descending)
@@ -815,7 +817,7 @@ class SortedEnumerable(Enumerable):
         :return: SortedEnumerable instance
         """
         if func is None:
-            raise NullArgumentError(u"then by requires a lambda function arg")
+            raise NullArgumentError("then by requires a lambda function arg")
         self._key_funcs.append(OrderingDirection(key=func, reverse=False))
         return SortedEnumerable(self, self._key_funcs)
 
@@ -826,9 +828,7 @@ class SortedEnumerable(Enumerable):
         :return: SortedEnumerable instance
         """
         if func is None:
-            raise NullArgumentError(
-                u"then_by_descending requires a lambda function arg"
-            )
+            raise NullArgumentError("then_by_descending requires a lambda function arg")
         self._key_funcs.append(OrderingDirection(key=func, reverse=True))
         return SortedEnumerable(self, self._key_funcs)
 

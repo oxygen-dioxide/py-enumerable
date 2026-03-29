@@ -61,7 +61,7 @@ class RepeatableIterable(object):
             data = []
         if not hasattr(data, "__iter__"):
             raise TypeError(
-                u"RepeatableIterable must be instantiated with an iterable object"
+                "RepeatableIterable must be instantiated with an iterable object"
             )
         self._data: Iterable[Any] = data
         self._len = None

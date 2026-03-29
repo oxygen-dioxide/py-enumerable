@@ -15,7 +15,7 @@ def deprecated(reason):
         def new_func(*args, **kwargs):
             warnings.simplefilter("always", DeprecationWarning)
             warnings.warn(
-                u"{0} is deprecated. {1}".format(func.__name__, reason),
+                "{0} is deprecated. {1}".format(func.__name__, reason),
                 category=DeprecationWarning,
                 stacklevel=2,
             )
