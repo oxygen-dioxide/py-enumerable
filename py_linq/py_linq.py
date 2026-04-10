@@ -6,22 +6,20 @@ from typing import (
     Set,
     Any,
     Iterable,
+    Iterator,
     TypeVar,
     Union,
     Dict,
     Optional,
     Callable,
+    Generic,
+    overload,
+    Protocol,
 )
 from queue import LifoQueue
 from six import string_types
 
 # python 2 to 3 compatibility imports
-try:
-    from itertools import imap as map
-    from itertools import ifilter as filter
-    from itertools import izip as zip
-except ImportError:
-    pass
 from builtins import range
 from .core import Key, OrderingDirection, RepeatableIterable, Node
 from .decorators import deprecated
@@ -33,15 +31,18 @@ from .exceptions import (
 )
 
 
-TEnumerable = TypeVar("TEnumerable", bound="Enumerable")
+T = TypeVar("T")
+T2 = TypeVar("T2")
+TResult = TypeVar("TResult")
+TKey = TypeVar("TKey")
 TGrouping = TypeVar("TGrouping", bound="Grouping")
 TSortedEnumerable = TypeVar("TSortedEnumerable", bound="SortedEnumerable")
 TGroupedEnumerable = TypeVar("TGroupedEnumerable", bound="GroupedEnumerable")
 Number = Union[float, int]
 
 
-class Enumerable(object):
-    def __init__(self, data=None):
+class Enumerable(Generic[T]):
+    def __init__(self, data: Iterable[T] | None = None):
         """
         Constructor
         ** Note: no type checking of the data elements are performed during
@@ -51,28 +52,29 @@ class Enumerable(object):
         """
         self._iterable = RepeatableIterable(data)
 
-    def __iter__(self) -> Iterable[Any]:
+    def __iter__(self) -> Iterator[T]:
         return iter(self._iterable)
 
-    def __reversed__(self) -> Iterable[Any]:
+    def __reversed__(self) -> Iterable[T]:
         return reversed(self._iterable)
 
-    def next(self) -> Any:
+    def next(self) -> T:
         return next(self._iterable)
 
-    def __next__(self) -> Any:
+    def __next__(self) -> T:
         return self.next()
 
-    def __getitem__(self, n) -> Any:
+    def __getitem__(self, n: int) -> T | None:
         """
         Gets item in iterable at specified zero-based index
         :param n: the index of the item to get
         :returns the element at the specified index.
-        :raises IndexError if n > number of elements in the iterable
+        :returns None if n > number of elements in the iterable
         """
         for i, e in enumerate(self):
             if i == n:
                 return e
+        return None
 
     def __len__(self) -> int:
         """
@@ -83,21 +85,21 @@ class Enumerable(object):
     def __repr__(self) -> str:
         return list(self).__repr__()
 
-    def to_list(self) -> List[Any]:
+    def to_list(self) -> List[T]:
         """
         Converts the iterable into a list
         :return: list object
         """
         return [x for x in self]
 
-    def to_set(self) -> Set[Any]:
+    def to_set(self) -> Set[T]:
         """
         Converts the iterable into a set
         :return: set object
         """
         return {x for x in self}
 
-    def count(self, predicate=None) -> int:
+    def count(self, predicate: Callable[[T], bool] | None = None) -> int:
         """
         Returns the number of elements in iterable
         :return: integer object
@@ -106,13 +108,21 @@ class Enumerable(object):
             return sum(1 for element in self.where(predicate))
         return sum(1 for element in self)
 
-    def select(self, func=lambda x: x) -> TEnumerable:
+    @overload
+    def select(self, func: None = None) -> "Enumerable[T]": ...
+
+    @overload
+    def select(self, func: Callable[[T], TResult]) -> "Enumerable[TResult]": ...
+
+    def select(self, func: Callable[[Any], Any] | None = None) -> "Enumerable[Any]":
         """
         Transforms data into different form
         :param func: lambda expression on how to perform transformation
         :return: new Enumerable object containing transformed data
         """
-        return Enumerable(map(func, self))
+        if func is None:
+            func = lambda x: x
+        return Enumerable(map(func, self._iterable))
 
     def sum(self, func=lambda x: x) -> Number:
         """
@@ -152,7 +162,7 @@ class Enumerable(object):
             raise NoElementsError("Iterable contains no elements")
         return float(self.sum(func)) / float(self.count())
 
-    def median(self, func=lambda x: x) -> Number:
+    def median(self, func=lambda x: x):
         """
         Return the median value of data elements
         :param func: lambda expression to project and sort data
@@ -169,7 +179,7 @@ class Enumerable(object):
             else (float(result[i - 1]) + float(result[i])) / float(2)
         )
 
-    def element_at(self, n) -> Any:
+    def element_at(self, n: int) -> T:
         """
         Returns element at given index.
             * Raises IndexError if no element found at specified position
@@ -183,7 +193,7 @@ class Enumerable(object):
             raise IndexError
         return result
 
-    def element_at_or_default(self, n) -> Optional[Any]:
+    def element_at_or_default(self, n: int) -> T | None:
         """
         Returns element at given index or None if no element found
             * Raises IndexError if n is greater than the number of elements in
@@ -196,51 +206,55 @@ class Enumerable(object):
         except IndexError:
             return None
 
-    def first(self, func=None) -> Any:
+    def first(self, predicate: Callable[[T], bool] | None = None) -> T:
         """
         Returns the first element in a collection
-        :func: predicate as lambda expression used to filter collection
+        :predicate: predicate as lambda expression used to filter collection
         :return: data element as object or NoElementsError if transformed data
         contains no elements
         """
-        if func is not None:
-            return self.where(func).element_at(0)
+        if predicate is not None:
+            return self.where(predicate).element_at(0)
         return self.element_at(0)
 
-    def first_or_default(self, func=None) -> Optional[Any]:
+    def first_or_default(
+        self, predicate: Callable[[T], bool] | None = None
+    ) -> Optional[T]:
         """
         Return the first element in a collection. If collection is empty, then returns None
-        :func: predicate as lambda expression used to filter collection
+        :predicate: predicate as lambda expression used to filter collection
         :return: data element as object or None if transformed data contains no
          elements
         """
-        if func is not None:
-            return self.where(func).element_at_or_default(0)
+        if predicate is not None:
+            return self.where(predicate).element_at_or_default(0)
         return self.element_at_or_default(0)
 
-    def last(self, func=None) -> Any:
+    def last(self, predicate: Callable[[T], bool] | None = None) -> T:
         """
         Return the last element in a collection
-        :func: predicate as a lambda expression used to filter collection
+        :predicate: predicate as a lambda expression used to filter collection
         :return: data element as object or NoElementsError if transformed data
         contains no elements
         """
-        if func is not None:
-            self.reverse().where(func).first()
+        if predicate is not None:
+            self.reverse().where(predicate).first()
         return self.reverse().first()
 
-    def last_or_default(self, func=None) -> Optional[Any]:
+    def last_or_default(
+        self, predicate: Callable[[T], bool] | None = None
+    ) -> Optional[Any]:
         """
         Return the last element in a collection or None if the collection is empty
         :func: predicate as a lambda expression used to filter collection
         :return: data element as object or None if transformed data contains no
          elements
         """
-        if func is not None:
-            return self.reverse().where(func).first_or_default()
+        if predicate is not None:
+            return self.reverse().where(predicate).first_or_default()
         return self.reverse().first_or_default()
 
-    def order_by(self, key):
+    def order_by(self, key: Callable[[T], Any]) -> "SortedEnumerable[T]":
         """
         Returns new Enumerable sorted in ascending order by given key
         :param key: key to sort by as lambda expression
@@ -251,7 +265,7 @@ class Enumerable(object):
         kf = [OrderingDirection(key, reverse=False)]
         return SortedEnumerable(Enumerable(iter(self)), key_funcs=kf)
 
-    def order_by_descending(self, key):
+    def order_by_descending(self, key: Callable[[T], Any]) -> "SortedEnumerable[T]":
         """
         Returns new Enumerable sorted in descending order by given key
         :param key: key to sort by as lambda expression
@@ -262,7 +276,7 @@ class Enumerable(object):
         kf = [OrderingDirection(key, reverse=True)]
         return SortedEnumerable(Enumerable(iter(self)), key_funcs=kf)
 
-    def skip(self, n) -> TEnumerable:
+    def skip(self, n: int) -> "Enumerable[T]":
         """
         Returns new Enumerable where n elements have been skipped
         :param n: Number of elements to skip as int
@@ -270,7 +284,7 @@ class Enumerable(object):
         """
         return Enumerable(data=itertools.islice(self, n, None, 1))
 
-    def take(self, n) -> TEnumerable:
+    def take(self, n: int) -> "Enumerable[T]":
         """
         Return new Enumerable where first n elements are taken
         :param n: Number of elements to take
@@ -278,7 +292,7 @@ class Enumerable(object):
         """
         return Enumerable(data=itertools.islice(self, 0, n, 1))
 
-    def where(self, predicate) -> TEnumerable:
+    def where(self, predicate: Callable[[T], bool]) -> "Enumerable[T]":
         """
         Returns new Enumerable where elements matching predicate are selected
         :param predicate: predicate as a lambda expression
@@ -288,7 +302,7 @@ class Enumerable(object):
             raise NullArgumentError("No predicate given for where clause")
         return Enumerable(filter(predicate, self))
 
-    def single(self, predicate=None) -> Any:
+    def single(self, predicate: Callable[[T], bool] | None = None) -> T:
         """
         Returns single element that matches given predicate.
         Raises:
@@ -305,7 +319,9 @@ class Enumerable(object):
             raise MoreThanOneMatchingElement("More than one matching element is found")
         return result.to_list()[0]
 
-    def single_or_default(self, predicate=None) -> Optional[Any]:
+    def single_or_default(
+        self, predicate: Callable[[T], bool] | None = None
+    ) -> Optional[T]:
         """
         Return single element that matches given predicate. If no matching
         element is found, returns None
@@ -320,16 +336,30 @@ class Enumerable(object):
         except NoMatchingElement:
             return None
 
-    def select_many(self, func=lambda x: x) -> TEnumerable:
+    @overload
+    def select_many(
+        self: "Enumerable[Iterable[TResult]]", func: None = None
+    ) -> "Enumerable[TResult]": ...
+
+    @overload
+    def select_many(
+        self, func: Callable[[T], Iterable[TResult]]
+    ) -> "Enumerable[TResult]": ...
+
+    def select_many(
+        self, func: Callable[[Any], Any] | None = None
+    ) -> "Enumerable[Any]":
         """
         Flattens an iterable of iterables returning a new Enumerable
         :param func: selector as lambda expression
         :return: new Enumerable object
         """
+        if func is None:
+            func = lambda x: x
         selected = self.select(func)
         return Enumerable(data=itertools.chain.from_iterable(selected))
 
-    def add(self, element) -> TEnumerable:
+    def add(self, element: T) -> "Enumerable[T]":
         """
         Adds an element to the enumerable.
         :param element: An element
@@ -343,7 +373,7 @@ class Enumerable(object):
             return self
         return self.concat(Enumerable([element]))
 
-    def concat(self, enumerable) -> TEnumerable:
+    def concat(self, enumerable: "Enumerable[T]") -> "Enumerable[T]":
         """
         Adds enumerable to an enumerable
         :param enumerable: An iterable object
@@ -355,7 +385,7 @@ class Enumerable(object):
 
     def group_by(
         self, key_names=[], key=lambda x: x, result_func=lambda x: x
-    ) -> TEnumerable:
+    ) -> "Enumerable[T]":
         """
         Groups an enumerable on given key selector. Index of key name
         corresponds to index of key lambda function.
@@ -390,7 +420,7 @@ class Enumerable(object):
         """
         return GroupedEnumerable(self, key, key_names, result_func)
 
-    def distinct(self, key=lambda x: x) -> TEnumerable:
+    def distinct(self, key=lambda x: x) -> "Enumerable[T]":
         """
         Returns enumerable containing elements that are distinct based on
         given key selector
@@ -436,7 +466,7 @@ class Enumerable(object):
 
     def group_join(
         self,
-        inner_enumerable: TEnumerable,
+        inner_enumerable: "Enumerable[T]",
         outer_key: Callable = lambda x: x,
         inner_key: Callable = lambda x: x,
         result_func: Callable = lambda x: x,
@@ -462,7 +492,7 @@ class Enumerable(object):
         ).select(result_func)
         return group_joined
 
-    def any(self, predicate: Callable = None):
+    def any(self, predicate: Callable[[T], bool] | None = None):
         """
         Returns true if any elements that satisfy predicate are found
         :param predicate: condition to satisfy as lambda expression
@@ -475,7 +505,7 @@ class Enumerable(object):
                 return True
         return False
 
-    def intersect(self, enumerable: TEnumerable, key: Callable):
+    def intersect(self, enumerable: "Enumerable[T]", key: Callable):
         """
         Returns enumerable that is the intersection between given enumerable
         and self
@@ -507,7 +537,7 @@ class Enumerable(object):
             result = func(result, e)
         return result
 
-    def union(self, enumerable: TEnumerable, key: Callable):
+    def union(self, enumerable: "Enumerable[T]", key: Callable):
         """
         Returns enumerable that is a union of elements between self and given
         enumerable
@@ -519,7 +549,7 @@ class Enumerable(object):
             raise TypeError("enumerable parameter must be an instance of Enumerable")
         return Enumerable(data=self.concat(enumerable)).distinct(key)
 
-    def except_(self, enumerable: TEnumerable, key: Callable):
+    def except_(self, enumerable: "Enumerable[T]", key: Callable):
         """
         Returns enumerable that subtracts given enumerable elements from self
         :param enumerable: enumerable object
@@ -541,7 +571,7 @@ class Enumerable(object):
         """
         return self.select(key).any(lambda x: x == key(element))
 
-    def all(self, predicate: Callable) -> bool:
+    def all(self, predicate: Callable[[T], bool]) -> bool:
         """
         Determines whether all elements in an enumerable satisfy the given
         predicate
@@ -567,7 +597,7 @@ class Enumerable(object):
         return Enumerable([element]).concat(self)
 
     @staticmethod
-    def empty():
+    def empty() -> "Enumerable[Any]":
         """
         Returns an empty enumerable
         :return: Enumerable object that contains no elements
@@ -575,7 +605,7 @@ class Enumerable(object):
         return Enumerable()
 
     @staticmethod
-    def range(start, length):
+    def range(start: int, length: int) -> "Enumerable[int]":
         """
         Generates a sequence of integers starting from start with length of length
         :param start: the starting value of the sequence
@@ -585,7 +615,7 @@ class Enumerable(object):
         return Enumerable(range(start, start + length, 1))
 
     @staticmethod
-    def repeat(element, length):
+    def repeat(element: T, length: int) -> "Enumerable[T]":
         """
         Generates an enumerable containing an element repeated length times
         :param element: the element to repeat
@@ -594,14 +624,14 @@ class Enumerable(object):
         """
         return Enumerable(data=itertools.repeat(element, length))
 
-    def reverse(self):
+    def reverse(self) -> "Enumerable[T]":
         """
         Inverts the order of the elements in a sequence
         :return: Enumerable with elements in reversed order
         """
-        return Enumerable(data=reversed(self))
+        return Enumerable(data=reversed(self._iterable))
 
-    def skip_last(self, n):
+    def skip_last(self, n: int) -> "Enumerable[T]":
         """
         Skips the last n elements in a sequence
         :param n: the number of elements to skip
@@ -609,7 +639,7 @@ class Enumerable(object):
         """
         return self.take(self.count() - n)
 
-    def skip_while(self, predicate):
+    def skip_while(self, predicate: Callable[[T], bool]) -> "Enumerable[T]":
         """
         Bypasses elements in a sequence while the predicate is True. After predicate fails
         remaining elements in sequence are returned
@@ -626,7 +656,7 @@ class Enumerable(object):
         """
         return self.skip(self.count() - n)
 
-    def take_while(self, predicate):
+    def take_while(self, predicate: Callable[[T], bool]) -> "Enumerable[T]":
         """
         Includes elements in a sequence while the predicate is True. After predicate fails
         remaining elements in a sequence are removed
@@ -647,7 +677,21 @@ class Enumerable(object):
             result[key(e)] = value(e)
         return result
 
-    def zip(self, enumerable, func=lambda x: x):
+    @overload
+    def zip(
+        self, enumerable: "Enumerable[T2]", func: None = None
+    ) -> "Enumerable[tuple[T, T2]]": ...
+
+    @overload
+    def zip(
+        self, enumerable: "Enumerable[T2]", func: Callable[[tuple[T, T2]], TResult]
+    ) -> "Enumerable[TResult]": ...
+
+    def zip(
+        self,
+        enumerable: "Enumerable[T2]",
+        func: Callable[[Any], Any] | None = None,
+    ) -> Any:
         """
         Merges 2 Enumerables using the given function. If the 2 collections are of unequal length, then
         merging continues until the end of one of the collections is reached
@@ -657,47 +701,49 @@ class Enumerable(object):
         """
         if not isinstance(enumerable, Enumerable):
             raise TypeError()
-        return ZipEnumerable(Enumerable(iter(self)), enumerable, func)
+        if func is None:
+            func = lambda x: x
+        return Enumerable(map(func, zip(self, enumerable)))
 
 
-class SkipWhileEnumerable(Enumerable):
+class SkipWhileEnumerable(Enumerable[T]):
     """
     Class to hold state for skipping elements while a given predicate is true
     """
 
-    def __init__(self, enumerable, predicate):
+    def __init__(self, enumerable: Enumerable[T], predicate: Callable[[T], object]):
         super(SkipWhileEnumerable, self).__init__(enumerable)
         self.predicate = predicate
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[T]:
         return itertools.dropwhile(self.predicate, self._iterable)
 
 
-class TakeEnumerable(Enumerable):
+class TakeEnumerable(Enumerable[T]):
     """
     Class to hold state for taking subset of consecutive elements in a collection
     """
 
-    def __init__(self, enumerable, n):
+    def __init__(self, enumerable: Enumerable[T], n: int):
         super(TakeEnumerable, self).__init__(enumerable)
         self.n = n
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[T]:
         for index, element in enumerate(self._iterable):
             if index < self.n:
                 yield element
 
 
-class TakeWhileEnumerable(Enumerable):
+class TakeWhileEnumerable(Enumerable[T]):
     """
     Class to hold state for taking elements while a given predicate is true
     """
 
-    def __init__(self, enumerable, predicate):
+    def __init__(self, enumerable: Enumerable[T], predicate: Callable[[T], object]):
         super(TakeWhileEnumerable, self).__init__(enumerable)
         self.predicate = predicate
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[T]:
         return itertools.takewhile(self.predicate, self._iterable)
 
 
@@ -706,7 +752,7 @@ class GroupedEnumerable(Enumerable):
         self,
         data: Iterable,
         key: Callable,
-        key_names: List[Dict],
+        key_names: List[str],
         func: Callable = lambda x: x,
     ) -> None:
         """
@@ -745,9 +791,9 @@ class GroupedRepeatableIterable(RepeatableIterable):
     def __init__(
         self,
         key: Callable,
-        key_names: List[Dict],
+        key_names: List[str],
         func: Callable,
-        data: Iterable[Any] = None,
+        data: Iterable | None = None,
     ):
         self.key = key
         self.key_names = key_names
@@ -761,24 +807,24 @@ class GroupedRepeatableIterable(RepeatableIterable):
             and not isinstance(key_value, string_types)
         )
 
-    def __iter__(self) -> Any:
+    def __iter__(self) -> Iterator:
         if self._root is None:
-            grouped_iterable = (
+            grouped_iterable = [
                 (k, list(g))
                 for k, g in itertools.groupby(
                     sorted(self._data, key=self.key), self.key
                 )
-            )
+            ]
             i = 0
             for key, group in grouped_iterable:
-                key_prop = {}
+                key_prop:dict[str, Any] = {}
                 for j, prop in enumerate(self.key_names):
                     key_prop.setdefault(
                         prop, key[j] if self._can_enumerate(key) else key
                     )
                 key_object = Key(key_prop)
                 node = Node(value=self.func(Grouping(key_object, list(group))))
-                if i == 0:
+                if self._current is None:
                     self._root = node
                     self._current = self._root
                 else:
@@ -794,8 +840,8 @@ class GroupedRepeatableIterable(RepeatableIterable):
         self._current = self._root
 
 
-class SortedEnumerable(Enumerable):
-    def __init__(self, data: Iterable, key_funcs):
+class SortedEnumerable(Enumerable[T]):
+    def __init__(self, data: Iterable[T], key_funcs):
         """
         Constructor
         :param key_funcs: list of OrderingDirection instances in order of primary key --> less important keys
@@ -810,7 +856,7 @@ class SortedEnumerable(Enumerable):
             data = sorted(data, key=o.key, reverse=o.descending)
         super(SortedEnumerable, self).__init__(data)
 
-    def then_by(self, func):
+    def then_by(self, func) -> "SortedEnumerable[T]":
         """
         Subsequent sorting function in ascending order
         :param func: lambda expression for secondary sort key
@@ -821,7 +867,7 @@ class SortedEnumerable(Enumerable):
         self._key_funcs.append(OrderingDirection(key=func, reverse=False))
         return SortedEnumerable(self, self._key_funcs)
 
-    def then_by_descending(self, func):
+    def then_by_descending(self, func) -> "SortedEnumerable[T]":
         """
         Subsequent sorting function in descending order
         :param func: lambda function for secondary sort key
@@ -831,19 +877,3 @@ class SortedEnumerable(Enumerable):
             raise NullArgumentError("then_by_descending requires a lambda function arg")
         self._key_funcs.append(OrderingDirection(key=func, reverse=True))
         return SortedEnumerable(self, self._key_funcs)
-
-
-class ZipEnumerable(Enumerable):
-    """
-    Class to hold state for zipping 2 collections together
-    """
-
-    def __init__(self, enumerable1, enumerable2, result_func):
-        super(ZipEnumerable, self).__init__(enumerable1)
-        self.enumerable = enumerable2
-        self.result_func = result_func
-
-    def __iter__(self):
-        return map(
-            lambda r: self.result_func(r), zip(iter(self._iterable), self.enumerable)
-        )
