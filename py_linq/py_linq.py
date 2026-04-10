@@ -817,7 +817,7 @@ class GroupedRepeatableIterable(RepeatableIterable):
             ]
             i = 0
             for key, group in grouped_iterable:
-                key_prop:dict[str, Any] = {}
+                key_prop: dict[str, Any] = {}
                 for j, prop in enumerate(self.key_names):
                     key_prop.setdefault(
                         prop, key[j] if self._can_enumerate(key) else key

@@ -16,6 +16,7 @@ from copy import deepcopy
 T = TypeVar("T")
 TKey = TypeVar("TKey")
 
+
 @dataclass
 class Node(Generic[T]):
     """
@@ -43,7 +44,7 @@ class Key(object):
 
 
 class OrderingDirection(Generic[T, TKey]):
-    def __init__(self, key:Callable[[T], TKey], reverse:bool) -> None:
+    def __init__(self, key: Callable[[T], TKey], reverse: bool) -> None:
         """
         A container to hold the lambda key and sorting direction
         :param key: lambda function
